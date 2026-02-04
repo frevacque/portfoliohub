@@ -137,7 +137,8 @@ class PerformanceService:
             if hist_data is None or hist_data.empty:
                 return {'data': [], 'total_return': 0, 'total_return_percent': 0}
             
-            # Filter by date range
+            # Filter by date range - make dates timezone naive for comparison
+            hist_data.index = hist_data.index.tz_localize(None)
             hist_data = hist_data[hist_data.index >= start_date]
             
             # Calculate performance
