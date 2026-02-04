@@ -31,6 +31,7 @@ class PositionCreate(BaseModel):
     type: str  # "stock" or "crypto"
     quantity: float
     avg_price: float
+    purchase_date: Optional[datetime] = None  # Date d'achat personnalisée
 
 class Position(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -40,6 +41,7 @@ class Position(BaseModel):
     type: str
     quantity: float
     avg_price: float
+    purchase_date: datetime = Field(default_factory=datetime.utcnow)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
