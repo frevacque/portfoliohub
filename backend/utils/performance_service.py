@@ -55,7 +55,8 @@ class PerformanceService:
                 if hist_data is None or hist_data.empty:
                     continue
                 
-                # Filter by date range
+                # Filter by date range - make dates timezone naive for comparison
+                hist_data.index = hist_data.index.tz_localize(None)
                 hist_data = hist_data[hist_data.index >= start_date]
                 
                 # Calculate position value over time
