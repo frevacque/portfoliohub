@@ -315,6 +315,257 @@ async def search_market(q: str):
     results = yf_service.search_ticker(q)
     return results
 
+# Performance endpoints
+@api_router.get("/analytics/performance")
+async def get_performance(user_id: str, period: str = 'all', symbol: Optional[str] = None):
+    """
+    Get performance data for portfolio or specific position
+    period: 'all', 'ytd', '1m', '3m', '6m', '1y'
+    """
+    if symbol:
+        # Get position data
+        position = await db.positions.find_one({"user_id": user_id, "symbol": symbol})
+        if not position:
+            raise HTTPException(status_code=404, detail="Position not found")
+        
+        perf_data = performance_service.calculate_position_performance(
+            symbol=position['symbol'],
+            quantity=position['quantity'],
+            purchase_price=position['avg_price'],
+            purchase_date=position.get('purchase_date', datetime.utcnow()),
+            period=period
+        )
+        
+        return {
+            'symbol': symbol,
+            'period': period,
+            **perf_data
+        }
+    else:
+        # Get portfolio performance
+        positions = await db.positions.find({"user_id": user_id}).to_list(1000)
+        
+        if not positions:
+            return {
+                'symbol': None,
+                'period': period,
+                'data': [],
+                'total_return': 0,
+                'total_return_percent': 0
+            }
+        
+        # Enrich positions with current prices
+        enriched_positions = []
+        for pos in positions:
+            current_price = yf_service.get_current_price(pos['symbol'])
+            if current_price:
+                enriched_positions.append({
+                    'symbol': pos['symbol'],
+                    'quantity': pos['quantity'],
+                    'avg_price': pos['avg_price'],
+                    'purchase_date': pos.get('purchase_date', datetime.utcnow())
+                })
+        
+        perf_data = performance_service.calculate_portfolio_performance(
+            enriched_positions,
+            period=period
+        )
+        
+        return {
+            'symbol': None,
+            'period': period,
+            **perf_data
+        }
+
+@api_router.get("/analytics/compare-index")
+async def compare_with_index(user_id: str, period: str = 'ytd', index: str = '^GSPC'):
+    """Compare portfolio performance with market index"""
+    # Get portfolio performance
+    positions = await db.positions.find({"user_id": user_id}).to_list(1000)
+    
+    if not positions:
+        return {'data': []}
+    
+    enriched_positions = []
+    for pos in positions:
+        enriched_positions.append({
+            'symbol': pos['symbol'],
+            'quantity': pos['quantity'],
+            'avg_price': pos['avg_price'],
+            'purchase_date': pos.get('purchase_date', datetime.utcnow())
+        })
+    
+    perf_data = performance_service.calculate_portfolio_performance(enriched_positions, period=period)
+    comparison = performance_service.compare_with_index(perf_data['data'], index)
+    
+    return comparison
+
+# Dividends endpoints
+@api_router.get("/dividends")
+async def get_dividends(user_id: str):
+    dividends = await db.dividends.find({"user_id": user_id}).sort("date", -1).to_list(1000)
+    return dividends
+
+@api_router.post("/dividends")
+async def add_dividend(dividend_data: DividendCreate, user_id: str):
+    # Get position
+    position = await db.positions.find_one({"id": dividend_data.position_id, "user_id": user_id})
+    if not position:
+        raise HTTPException(status_code=404, detail="Position not found")
+    
+    dividend = Dividend(
+        user_id=user_id,
+        position_id=dividend_data.position_id,
+        symbol=position['symbol'],
+        amount=dividend_data.amount,
+        date=dividend_data.date,
+        notes=dividend_data.notes
+    )
+    
+    await db.dividends.insert_one(dividend.dict())
+    return dividend
+
+@api_router.delete("/dividends/{dividend_id}")
+async def delete_dividend(dividend_id: str, user_id: str):
+    result = await db.dividends.delete_one({"id": dividend_id, "user_id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Dividend not found")
+    return {"message": "Dividend deleted successfully"}
+
+# Alerts endpoints
+@api_router.get("/alerts")
+async def get_alerts(user_id: str):
+    alerts = await db.alerts.find({"user_id": user_id}).to_list(1000)
+    return alerts
+
+@api_router.post("/alerts")
+async def create_alert(alert_data: AlertCreate, user_id: str):
+    alert = Alert(
+        user_id=user_id,
+        symbol=alert_data.symbol.upper(),
+        alert_type=alert_data.alert_type,
+        target_value=alert_data.target_value,
+        notes=alert_data.notes
+    )
+    
+    await db.alerts.insert_one(alert.dict())
+    return alert
+
+@api_router.put("/alerts/{alert_id}")
+async def update_alert(alert_id: str, user_id: str, is_active: bool):
+    result = await db.alerts.update_one(
+        {"id": alert_id, "user_id": user_id},
+        {"$set": {"is_active": is_active}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    return {"message": "Alert updated successfully"}
+
+@api_router.delete("/alerts/{alert_id}")
+async def delete_alert(alert_id: str, user_id: str):
+    result = await db.alerts.delete_one({"id": alert_id, "user_id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    return {"message": "Alert deleted successfully"}
+
+# Goals endpoints
+@api_router.get("/goals")
+async def get_goals(user_id: str):
+    goals = await db.goals.find({"user_id": user_id}).to_list(1000)
+    return goals
+
+@api_router.post("/goals")
+async def create_goal(goal_data: GoalCreate, user_id: str):
+    goal = Goal(
+        user_id=user_id,
+        title=goal_data.title,
+        target_amount=goal_data.target_amount,
+        target_date=goal_data.target_date,
+        description=goal_data.description
+    )
+    
+    await db.goals.insert_one(goal.dict())
+    return goal
+
+@api_router.put("/goals/{goal_id}")
+async def update_goal(goal_id: str, user_id: str, is_completed: bool):
+    result = await db.goals.update_one(
+        {"id": goal_id, "user_id": user_id},
+        {"$set": {"is_completed": is_completed}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    return {"message": "Goal updated successfully"}
+
+@api_router.delete("/goals/{goal_id}")
+async def delete_goal(goal_id: str, user_id: str):
+    result = await db.goals.delete_one({"id": goal_id, "user_id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    return {"message": "Goal deleted successfully"}
+
+# Notes endpoints
+@api_router.get("/notes/{position_id}")
+async def get_notes(position_id: str, user_id: str):
+    notes = await db.notes.find({"position_id": position_id, "user_id": user_id}).to_list(1000)
+    return notes
+
+@api_router.post("/notes")
+async def create_note(note_data: NoteCreate, user_id: str):
+    note = Note(
+        user_id=user_id,
+        position_id=note_data.position_id,
+        content=note_data.content
+    )
+    
+    await db.notes.insert_one(note.dict())
+    return note
+
+@api_router.put("/notes/{note_id}")
+async def update_note(note_id: str, user_id: str, content: str):
+    result = await db.notes.update_one(
+        {"id": note_id, "user_id": user_id},
+        {"$set": {"content": content, "updated_at": datetime.utcnow()}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return {"message": "Note updated successfully"}
+
+@api_router.delete("/notes/{note_id}")
+async def delete_note(note_id: str, user_id: str):
+    result = await db.notes.delete_one({"id": note_id, "user_id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return {"message": "Note deleted successfully"}
+
+# Budget endpoints
+@api_router.get("/budget")
+async def get_budget(user_id: str):
+    budget = await db.budgets.find_one({"user_id": user_id})
+    return budget
+
+@api_router.post("/budget")
+async def create_or_update_budget(budget_data: BudgetCreate, user_id: str):
+    # Check if budget exists
+    existing = await db.budgets.find_one({"user_id": user_id})
+    
+    if existing:
+        # Update existing
+        await db.budgets.update_one(
+            {"user_id": user_id},
+            {"$set": budget_data.dict()}
+        )
+        return await db.budgets.find_one({"user_id": user_id})
+    else:
+        # Create new
+        budget = Budget(
+            user_id=user_id,
+            monthly_amount=budget_data.monthly_amount,
+            start_date=budget_data.start_date
+        )
+        await db.budgets.insert_one(budget.dict())
+        return budget
+
 # Include the router in the main app
 app.include_router(api_router)
 
