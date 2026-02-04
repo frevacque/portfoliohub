@@ -6,6 +6,7 @@ import Navbar from './components/Navbar';
 import Dashboard from './components/Dashboard';
 import Portfolio from './components/Portfolio';
 import History from './components/History';
+import Performance from './components/Performance';
 import { storage } from './api';
 
 function App() {
