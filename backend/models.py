@@ -105,3 +105,93 @@ class MarketQuote(BaseModel):
     change: float
     change_percent: float
     volume: int
+
+# Performance Models
+class PerformanceData(BaseModel):
+    date: str
+    value: float
+    change_percent: float
+
+class PerformanceResponse(BaseModel):
+    symbol: Optional[str] = None
+    period: str
+    data: List[PerformanceData]
+    total_return: float
+    total_return_percent: float
+
+# Dividend Models
+class DividendCreate(BaseModel):
+    position_id: str
+    amount: float
+    date: datetime
+    notes: Optional[str] = None
+
+class Dividend(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    position_id: str
+    symbol: str
+    amount: float
+    date: datetime
+    notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+# Alert Models
+class AlertCreate(BaseModel):
+    symbol: str
+    alert_type: str  # "price_above", "price_below", "volatility_high"
+    target_value: float
+    notes: Optional[str] = None
+
+class Alert(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    symbol: str
+    alert_type: str
+    target_value: float
+    is_active: bool = True
+    is_triggered: bool = False
+    notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+# Goal Models
+class GoalCreate(BaseModel):
+    title: str
+    target_amount: float
+    target_date: Optional[datetime] = None
+    description: Optional[str] = None
+
+class Goal(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    title: str
+    target_amount: float
+    target_date: Optional[datetime] = None
+    description: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    is_completed: bool = False
+
+# Note Models
+class NoteCreate(BaseModel):
+    position_id: str
+    content: str
+
+class Note(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    position_id: str
+    content: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+# Budget Models
+class BudgetCreate(BaseModel):
+    monthly_amount: float
+    start_date: datetime
+
+class Budget(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    monthly_amount: float
+    start_date: datetime
+    created_at: datetime = Field(default_factory=datetime.utcnow)
