@@ -1,16 +1,23 @@
-import React, { useState } from 'react';
-import { Plus, Search, TrendingUp, TrendingDown, X } from 'lucide-react';
-import { mockPositions, mockCorrelationMatrix } from '../mockData';
+import React, { useState, useEffect } from 'react';
+import { Plus, Search, TrendingUp, TrendingDown, X, Trash2 } from 'lucide-react';
+import { portfolioAPI, analyticsAPI, storage } from '../api';
 
 const Portfolio = () => {
+  const [positions, setPositions] = useState([]);
+  const [correlations, setCorrelations] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     symbol: '',
     type: 'stock',
     quantity: '',
-    avgPrice: ''
+    avg_price: ''
   });
+  const [error, setError] = useState('');
+
+  const userId = storage.getUserId();
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value);
@@ -20,16 +27,79 @@ const Portfolio = () => {
     return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
   };
 
-  const handleAddPosition = () => {
-    alert('Position ajoutée avec succès! (mock data)');
-    setShowAddModal(false);
-    setFormData({ symbol: '', type: 'stock', quantity: '', avgPrice: '' });
+  const fetchData = async () => {
+    try {
+      const [positionsData, correlationsData] = await Promise.all([
+        portfolioAPI.getPositions(userId),
+        analyticsAPI.getCorrelation(userId)
+      ]);
+      setPositions(positionsData);
+      setCorrelations(correlationsData);
+    } catch (error) {
+      console.error('Error fetching portfolio data:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const filteredPositions = mockPositions.filter(pos =>
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleAddPosition = async () => {
+    if (!formData.symbol || !formData.quantity || !formData.avg_price) {
+      setError('Veuillez remplir tous les champs');
+      return;
+    }
+
+    setSubmitting(true);
+    setError('');
+
+    try {
+      await portfolioAPI.addPosition(userId, {
+        symbol: formData.symbol.toUpperCase(),
+        type: formData.type,
+        quantity: parseFloat(formData.quantity),
+        avg_price: parseFloat(formData.avg_price)
+      });
+
+      // Refresh data
+      await fetchData();
+
+      setShowAddModal(false);
+      setFormData({ symbol: '', type: 'stock', quantity: '', avg_price: '' });
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Erreur lors de l\'ajout de la position');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeletePosition = async (positionId) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette position ?')) {
+      return;
+    }
+
+    try {
+      await portfolioAPI.deletePosition(userId, positionId);
+      await fetchData();
+    } catch (error) {
+      console.error('Error deleting position:', error);
+    }
+  };
+
+  const filteredPositions = positions.filter(pos =>
     pos.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
     pos.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="container" style={{ padding: '32px 24px', textAlign: 'center' }}>
+        <div style={{ color: 'var(--text-muted)', fontSize: '18px' }}>Chargement...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="container" style={{ padding: '32px 24px' }}>
@@ -46,151 +116,196 @@ const Portfolio = () => {
       </div>
 
       {/* Search Bar */}
-      <div style={{ marginBottom: '24px', position: 'relative' }}>
-        <Search size={20} style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-        <input
-          type="text"
-          placeholder="Rechercher un titre..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="input-field"
-          style={{ paddingLeft: '52px' }}
-        />
-      </div>
+      {positions.length > 0 && (
+        <div style={{ marginBottom: '24px', position: 'relative' }}>
+          <Search size={20} style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input
+            type="text"
+            placeholder="Rechercher un titre..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="input-field"
+            style={{ paddingLeft: '52px' }}
+          />
+        </div>
+      )}
 
       {/* Positions Grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
-        gap: '24px',
-        marginBottom: '48px'
-      }}>
-        {filteredPositions.map(position => (
-          <div key={position.id} className="card" style={{ cursor: 'pointer' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '16px' }}>
-              <div>
-                <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '4px' }}>
-                  {position.symbol}
+      {filteredPositions.length > 0 ? (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+          gap: '24px',
+          marginBottom: '48px'
+        }}>
+          {filteredPositions.map(position => (
+            <div key={position.id} className="card" style={{ position: 'relative' }}>
+              <button
+                onClick={() => handleDeletePosition(position.id)}
+                style={{
+                  position: 'absolute',
+                  top: '16px',
+                  right: '16px',
+                  background: 'var(--danger-bg)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px',
+                  cursor: 'pointer',
+                  color: 'var(--danger)',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--danger)';
+                  e.currentTarget.style.color = 'white';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'var(--danger-bg)';
+                  e.currentTarget.style.color = 'var(--danger)';
+                }}
+              >
+                <Trash2 size={16} />
+              </button>
+
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                  <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)' }}>
+                    {position.symbol}
+                  </div>
+                  <span className="badge badge-info">
+                    {position.type === 'stock' ? 'Action' : 'Crypto'}
+                  </span>
                 </div>
                 <div style={{ fontSize: '14px', color: 'var(--text-muted)' }}>{position.name}</div>
               </div>
-              <span className="badge badge-info">
-                {position.type === 'stock' ? 'Action' : 'Crypto'}
-              </span>
-            </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ fontSize: '28px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '4px' }}>
-                {formatCurrency(position.totalValue)}
-              </div>
-              <div style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
-                {position.quantity} × {formatCurrency(position.currentPrice)}
-              </div>
-            </div>
-
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              padding: '12px',
-              background: position.gainLossPercent >= 0 ? 'var(--success-bg)' : 'var(--danger-bg)',
-              borderRadius: '8px',
-              marginBottom: '16px'
-            }}>
-              <div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Gain/Perte</div>
-                <div style={{
-                  fontSize: '18px',
-                  fontWeight: '600',
-                  color: position.gainLossPercent >= 0 ? 'var(--success)' : 'var(--danger)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}>
-                  {position.gainLossPercent >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
-                  {formatPercent(position.gainLossPercent)}
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '28px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '4px' }}>
+                  {formatCurrency(position.total_value)}
+                </div>
+                <div style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+                  {position.quantity} × {formatCurrency(position.current_price)}
                 </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Montant</div>
-                <div style={{
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  color: position.gainLossPercent >= 0 ? 'var(--success)' : 'var(--danger)'
-                }}>
-                  {formatCurrency(position.gainLoss)}
+
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                padding: '12px',
+                background: position.gain_loss_percent >= 0 ? 'var(--success-bg)' : 'var(--danger-bg)',
+                borderRadius: '8px',
+                marginBottom: '16px'
+              }}>
+                <div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Gain/Perte</div>
+                  <div style={{
+                    fontSize: '18px',
+                    fontWeight: '600',
+                    color: position.gain_loss_percent >= 0 ? 'var(--success)' : 'var(--danger)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    {position.gain_loss_percent >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+                    {formatPercent(position.gain_loss_percent)}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Montant</div>
+                  <div style={{
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    color: position.gain_loss_percent >= 0 ? 'var(--success)' : 'var(--danger)'
+                  }}>
+                    {formatCurrency(position.gain_loss)}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '14px' }}>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', marginBottom: '4px' }}>Bêta</div>
+                  <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{position.beta.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', marginBottom: '4px' }}>Volatilité</div>
+                  <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{position.volatility.toFixed(1)}%</div>
                 </div>
               </div>
             </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '14px' }}>
-              <div>
-                <div style={{ color: 'var(--text-muted)', marginBottom: '4px' }}>Bêta</div>
-                <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{position.beta.toFixed(2)}</div>
-              </div>
-              <div>
-                <div style={{ color: 'var(--text-muted)', marginBottom: '4px' }}>Volatilité</div>
-                <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{position.volatility.toFixed(1)}%</div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="card" style={{ textAlign: 'center', padding: '48px 24px', marginBottom: '48px' }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: '18px', marginBottom: '16px' }}>
+            {searchTerm ? 'Aucune position trouvée' : 'Aucune position dans votre portefeuille'}
+          </p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '24px' }}>
+            Commencez par ajouter votre première position
+          </p>
+          <button className="btn-primary" onClick={() => setShowAddModal(true)}>
+            <Plus size={20} />
+            Ajouter une position
+          </button>
+        </div>
+      )}
 
       {/* Correlation Matrix */}
-      <div className="card">
-        <h2 className="h2" style={{ marginBottom: '24px' }}>Matrice de Corrélation</h2>
-        <p className="body-sm" style={{ marginBottom: '24px' }}>Analyse des corrélations entre vos différentes positions</p>
-        
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid var(--border-primary)', color: 'var(--text-muted)', fontSize: '14px' }}>Titre 1</th>
-                <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid var(--border-primary)', color: 'var(--text-muted)', fontSize: '14px' }}>Titre 2</th>
-                <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid var(--border-primary)', color: 'var(--text-muted)', fontSize: '14px' }}>Corrélation</th>
-                <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid var(--border-primary)', color: 'var(--text-muted)', fontSize: '14px' }}>Interprétation</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mockCorrelationMatrix.map((corr, idx) => {
-                let interpretation = '';
-                let color = '';
-                if (corr.correlation > 0.7) {
-                  interpretation = 'Forte corrélation';
-                  color = 'var(--warning)';
-                } else if (corr.correlation > 0.4) {
-                  interpretation = 'Corrélation modérée';
-                  color = 'var(--info)';
-                } else {
-                  interpretation = 'Faible corrélation';
-                  color = 'var(--success)';
-                }
+      {correlations.length > 0 && (
+        <div className="card">
+          <h2 className="h2" style={{ marginBottom: '24px' }}>Matrice de Corrélation</h2>
+          <p className="body-sm" style={{ marginBottom: '24px' }}>Analyse des corrélations entre vos différentes positions</p>
+          
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid var(--border-primary)', color: 'var(--text-muted)', fontSize: '14px' }}>Titre 1</th>
+                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid var(--border-primary)', color: 'var(--text-muted)', fontSize: '14px' }}>Titre 2</th>
+                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid var(--border-primary)', color: 'var(--text-muted)', fontSize: '14px' }}>Corrélation</th>
+                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid var(--border-primary)', color: 'var(--text-muted)', fontSize: '14px' }}>Interprétation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {correlations.map((corr, idx) => {
+                  let interpretation = '';
+                  let color = '';
+                  if (corr.correlation > 0.7) {
+                    interpretation = 'Forte corrélation';
+                    color = 'var(--warning)';
+                  } else if (corr.correlation > 0.4) {
+                    interpretation = 'Corrélation modérée';
+                    color = 'var(--info)';
+                  } else {
+                    interpretation = 'Faible corrélation';
+                    color = 'var(--success)';
+                  }
 
-                return (
-                  <tr key={idx} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                    <td style={{ padding: '12px', fontWeight: '600', color: 'var(--text-primary)' }}>{corr.symbol1}</td>
-                    <td style={{ padding: '12px', fontWeight: '600', color: 'var(--text-primary)' }}>{corr.symbol2}</td>
-                    <td style={{ padding: '12px' }}>
-                      <span style={{
-                        fontWeight: '600',
-                        color: 'var(--text-primary)',
-                        background: 'var(--bg-tertiary)',
-                        padding: '4px 12px',
-                        borderRadius: '6px'
-                      }}>
-                        {corr.correlation.toFixed(2)}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px' }}>
-                      <span style={{ color, fontWeight: '500' }}>{interpretation}</span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                  return (
+                    <tr key={idx} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                      <td style={{ padding: '12px', fontWeight: '600', color: 'var(--text-primary)' }}>{corr.symbol1}</td>
+                      <td style={{ padding: '12px', fontWeight: '600', color: 'var(--text-primary)' }}>{corr.symbol2}</td>
+                      <td style={{ padding: '12px' }}>
+                        <span style={{
+                          fontWeight: '600',
+                          color: 'var(--text-primary)',
+                          background: 'var(--bg-tertiary)',
+                          padding: '4px 12px',
+                          borderRadius: '6px'
+                        }}>
+                          {corr.correlation.toFixed(2)}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px' }}>
+                        <span style={{ color, fontWeight: '500' }}>{interpretation}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Add Position Modal */}
       {showAddModal && (
@@ -213,7 +328,10 @@ const Portfolio = () => {
             position: 'relative'
           }}>
             <button
-              onClick={() => setShowAddModal(false)}
+              onClick={() => {
+                setShowAddModal(false);
+                setError('');
+              }}
               style={{
                 position: 'absolute',
                 top: '16px',
@@ -230,6 +348,20 @@ const Portfolio = () => {
 
             <h2 className="h2" style={{ marginBottom: '24px' }}>Ajouter une position</h2>
 
+            {error && (
+              <div style={{
+                padding: '12px',
+                background: 'var(--danger-bg)',
+                border: '1px solid var(--danger)',
+                borderRadius: '8px',
+                marginBottom: '20px',
+                color: 'var(--danger)',
+                fontSize: '14px'
+              }}>
+                {error}
+              </div>
+            )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500', color: 'var(--text-secondary)' }}>Type</label>
@@ -244,12 +376,14 @@ const Portfolio = () => {
               </div>
 
               <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500', color: 'var(--text-secondary)' }}>Symbole</label>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500', color: 'var(--text-secondary)' }}>
+                  Symbole {formData.type === 'crypto' && <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>(ex: BTC-USD, ETH-USD)</span>}
+                </label>
                 <input
                   type="text"
-                  placeholder="Ex: AAPL, BTC-USD"
+                  placeholder="Ex: AAPL, MSFT, BTC-USD"
                   value={formData.symbol}
-                  onChange={(e) => setFormData({ ...formData, symbol: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, symbol: e.target.value.toUpperCase() })}
                   className="input-field"
                 />
               </div>
@@ -258,6 +392,7 @@ const Portfolio = () => {
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500', color: 'var(--text-secondary)' }}>Quantité</label>
                 <input
                   type="number"
+                  step="any"
                   placeholder="Ex: 10"
                   value={formData.quantity}
                   onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
@@ -266,19 +401,29 @@ const Portfolio = () => {
               </div>
 
               <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500', color: 'var(--text-secondary)' }}>Prix d'achat moyen</label>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500', color: 'var(--text-secondary)' }}>Prix d'achat moyen (PRU)</label>
                 <input
                   type="number"
+                  step="any"
                   placeholder="Ex: 150.50"
-                  value={formData.avgPrice}
-                  onChange={(e) => setFormData({ ...formData, avgPrice: e.target.value })}
+                  value={formData.avg_price}
+                  onChange={(e) => setFormData({ ...formData, avg_price: e.target.value })}
                   className="input-field"
                 />
               </div>
 
-              <button className="btn-primary" onClick={handleAddPosition} style={{ width: '100%', marginTop: '8px' }}>
-                <Plus size={20} />
-                Ajouter la position
+              <button 
+                className="btn-primary" 
+                onClick={handleAddPosition} 
+                style={{ width: '100%', marginTop: '8px' }}
+                disabled={submitting}
+              >
+                {submitting ? 'Ajout en cours...' : (
+                  <>
+                    <Plus size={20} />
+                    Ajouter la position
+                  </>
+                )}
               </button>
             </div>
           </div>
