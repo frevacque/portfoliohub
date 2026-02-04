@@ -40,7 +40,7 @@ class PortfolioAnalytics:
             
             # Calculate volatilities
             daily_vol = float(portfolio_returns.std() * 100)  # Daily volatility
-            monthly_vol = float(portfolio_returns.resample('M').sum().std() * 100)  # Monthly volatility
+            monthly_vol = float(portfolio_returns.resample('ME').sum().std() * 100)  # Monthly volatility (ME = Month End)
             historical_vol = self.yf_service.calculate_volatility(portfolio_returns, annualize=True)
             
             return {
