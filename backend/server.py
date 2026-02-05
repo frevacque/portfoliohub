@@ -17,6 +17,7 @@ from models import (
     AlertCreate, Alert, GoalCreate, Goal,
     NoteCreate, Note, BudgetCreate, Budget
 )
+from models_portfolio import PortfolioCreate, Portfolio
 from utils.yahoo_finance import YahooFinanceService
 from utils.portfolio_analytics import PortfolioAnalytics
 from utils.performance_service import PerformanceService
