@@ -78,7 +78,8 @@ const Portfolio = () => {
         type: formData.type,
         quantity: parseFloat(formData.quantity),
         avg_price: parseFloat(formData.avg_price),
-        purchase_date: new Date(formData.purchase_date).toISOString()
+        purchase_date: new Date(formData.purchase_date).toISOString(),
+        portfolio_id: activePortfolio?.id || null
       });
 
       // Refresh data
