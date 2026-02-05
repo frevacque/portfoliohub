@@ -131,10 +131,13 @@ const Portfolio = () => {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
         <div>
-          <h1 className="display-md" style={{ marginBottom: '8px' }}>Mon Portefeuille</h1>
-          <p className="body-md" style={{ color: 'var(--text-muted)' }}>Gérez vos positions et analysez les corrélations</p>
+          <h1 className="display-md" style={{ marginBottom: '8px' }}>Mes Positions</h1>
+          <p className="body-md" style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Briefcase size={16} />
+            {activePortfolio ? activePortfolio.name : 'Chargement...'}
+          </p>
         </div>
-        <button className="btn-primary" onClick={() => setShowAddModal(true)}>
+        <button className="btn-primary" onClick={() => setShowAddModal(true)} data-testid="add-position-btn">
           <Plus size={20} />
           Ajouter une position
         </button>
