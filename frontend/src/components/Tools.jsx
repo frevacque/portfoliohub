@@ -263,19 +263,58 @@ const Tools = () => {
               </button>
             </div>
 
-            {/* Import - Future feature */}
-            <div style={{ padding: '24px', background: 'var(--bg-tertiary)', borderRadius: '12px', opacity: 0.6 }}>
+            {/* Import */}
+            <div style={{ padding: '24px', background: 'var(--bg-tertiary)', borderRadius: '12px' }}>
               <div style={{ marginBottom: '16px' }}>
-                <Upload size={32} color="var(--text-muted)" />
+                <Upload size={32} color="var(--accent-primary)" />
               </div>
               <h3 className="h3" style={{ marginBottom: '8px' }}>Importer des données</h3>
               <p className="body-sm" style={{ marginBottom: '16px', color: 'var(--text-muted)' }}>
-                Fonctionnalité bientôt disponible
+                Importez vos positions depuis un fichier CSV. Format requis: Symbole, Quantité, Prix
               </p>
-              <button className="btn-secondary" disabled style={{ width: '100%' }}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleImportCSV}
+                style={{ display: 'none' }}
+              />
+              <button 
+                className="btn-secondary" 
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+                style={{ width: '100%' }}
+              >
                 <Upload size={18} />
-                Bientôt disponible
+                {loading ? 'Import en cours...' : 'Importer un CSV'}
               </button>
+              
+              {importResult && (
+                <div style={{ 
+                  marginTop: '16px', 
+                  padding: '12px', 
+                  borderRadius: '8px',
+                  background: importResult.success ? 'var(--success-bg)' : 'var(--danger-bg)',
+                  border: `1px solid ${importResult.success ? 'var(--success)' : 'var(--danger)'}`
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    {importResult.success ? (
+                      <CheckCircle size={18} color="var(--success)" />
+                    ) : (
+                      <AlertCircle size={18} color="var(--danger)" />
+                    )}
+                    <span style={{ color: importResult.success ? 'var(--success)' : 'var(--danger)', fontWeight: '600' }}>
+                      {importResult.success ? 'Import réussi' : 'Erreur'}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>{importResult.message}</p>
+                  {importResult.errors && importResult.errors.length > 0 && (
+                    <ul style={{ marginTop: '8px', paddingLeft: '16px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                      {importResult.errors.map((err, i) => <li key={i}>{err}</li>)}
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
