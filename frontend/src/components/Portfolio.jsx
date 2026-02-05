@@ -32,8 +32,22 @@ const Portfolio = () => {
 
   const fetchData = async () => {
     try {
+      // Get portfolios first
+      const portfoliosData = await portfoliosAPI.getAll(userId);
+      setPortfolios(portfoliosData);
+      
+      // Get active portfolio from localStorage or use first one
+      const activePortfolioId = storage.getActivePortfolioId();
+      let currentPortfolio = portfoliosData.find(p => p.id === activePortfolioId);
+      if (!currentPortfolio && portfoliosData.length > 0) {
+        currentPortfolio = portfoliosData[0];
+        storage.setActivePortfolioId(currentPortfolio.id);
+      }
+      setActivePortfolio(currentPortfolio);
+      
+      // Get positions for active portfolio
       const [positionsData, correlationsData] = await Promise.all([
-        portfolioAPI.getPositions(userId),
+        portfolioAPI.getPositions(userId, currentPortfolio?.id),
         analyticsAPI.getCorrelation(userId)
       ]);
       setPositions(positionsData);
