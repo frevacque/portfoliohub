@@ -224,31 +224,53 @@ const Portfolio = () => {
         }}>
           {filteredPositions.map(position => (
             <div key={position.id} className="card" style={{ position: 'relative' }}>
-              <button
-                onClick={() => handleDeletePosition(position.id)}
-                style={{
-                  position: 'absolute',
-                  top: '16px',
-                  right: '16px',
-                  background: 'var(--danger-bg)',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '8px',
-                  cursor: 'pointer',
-                  color: 'var(--danger)',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'var(--danger)';
-                  e.currentTarget.style.color = 'white';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'var(--danger-bg)';
-                  e.currentTarget.style.color = 'var(--danger)';
-                }}
-              >
-                <Trash2 size={16} />
-              </button>
+              <div style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => openNotesModal(position)}
+                  style={{
+                    background: 'var(--bg-tertiary)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px',
+                    cursor: 'pointer',
+                    color: 'var(--text-muted)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--accent-bg)';
+                    e.currentTarget.style.color = 'var(--accent-primary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-tertiary)';
+                    e.currentTarget.style.color = 'var(--text-muted)';
+                  }}
+                  title="Notes"
+                >
+                  <StickyNote size={16} />
+                </button>
+                <button
+                  onClick={() => handleDeletePosition(position.id)}
+                  style={{
+                    background: 'var(--danger-bg)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px',
+                    cursor: 'pointer',
+                    color: 'var(--danger)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--danger)';
+                    e.currentTarget.style.color = 'white';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--danger-bg)';
+                    e.currentTarget.style.color = 'var(--danger)';
+                  }}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
 
               <div style={{ marginBottom: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
