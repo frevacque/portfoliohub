@@ -779,6 +779,112 @@ async def delete_portfolio(portfolio_id: str, user_id: str):
     
     return {"message": "Portefeuille supprimé avec succès"}
 
+# Cash Management endpoints
+@api_router.get("/cash/balance")
+async def get_cash_balance(user_id: str):
+    """Get current cash balance"""
+    balance = await db.cash_balances.find_one({"user_id": user_id})
+    if not balance:
+        # Create initial balance
+        new_balance = CashBalance(user_id=user_id, balance=0.0)
+        await db.cash_balances.insert_one(new_balance.dict())
+        return {"balance": 0.0, "updated_at": new_balance.updated_at.isoformat()}
+    
+    return {
+        "balance": balance['balance'],
+        "updated_at": balance['updated_at'].isoformat() if hasattr(balance['updated_at'], 'isoformat') else balance['updated_at']
+    }
+
+@api_router.get("/cash/transactions")
+async def get_cash_transactions(user_id: str):
+    """Get cash transaction history"""
+    transactions = await db.cash_transactions.find({"user_id": user_id}).sort("date", -1).to_list(1000)
+    
+    clean_transactions = []
+    for t in transactions:
+        clean_t = {k: v for k, v in t.items() if k != '_id'}
+        if 'date' in clean_t and hasattr(clean_t['date'], 'isoformat'):
+            clean_t['date'] = clean_t['date'].isoformat()
+        if 'created_at' in clean_t and hasattr(clean_t['created_at'], 'isoformat'):
+            clean_t['created_at'] = clean_t['created_at'].isoformat()
+        clean_transactions.append(clean_t)
+    
+    return clean_transactions
+
+@api_router.post("/cash/transaction")
+async def add_cash_transaction(transaction_data: CashTransactionCreate, user_id: str):
+    """Add a cash deposit or withdrawal"""
+    # Validate type
+    if transaction_data.type not in ['deposit', 'withdrawal']:
+        raise HTTPException(status_code=400, detail="Type doit être 'deposit' ou 'withdrawal'")
+    
+    # Get current balance
+    balance_doc = await db.cash_balances.find_one({"user_id": user_id})
+    current_balance = balance_doc['balance'] if balance_doc else 0.0
+    
+    # Calculate new balance
+    if transaction_data.type == 'deposit':
+        new_balance = current_balance + transaction_data.amount
+    else:
+        new_balance = current_balance - transaction_data.amount
+        if new_balance < 0:
+            raise HTTPException(status_code=400, detail="Solde insuffisant pour ce retrait")
+    
+    # Create transaction
+    transaction = CashTransaction(
+        user_id=user_id,
+        type=transaction_data.type,
+        amount=transaction_data.amount,
+        description=transaction_data.description,
+        date=transaction_data.date or datetime.utcnow()
+    )
+    await db.cash_transactions.insert_one(transaction.dict())
+    
+    # Update balance
+    if balance_doc:
+        await db.cash_balances.update_one(
+            {"user_id": user_id},
+            {"$set": {"balance": new_balance, "updated_at": datetime.utcnow()}}
+        )
+    else:
+        new_balance_doc = CashBalance(user_id=user_id, balance=new_balance)
+        await db.cash_balances.insert_one(new_balance_doc.dict())
+    
+    return {
+        "message": "Transaction enregistrée",
+        "new_balance": new_balance,
+        "transaction_id": transaction.id
+    }
+
+@api_router.delete("/cash/transaction/{transaction_id}")
+async def delete_cash_transaction(transaction_id: str, user_id: str):
+    """Delete a cash transaction and adjust balance"""
+    # Find the transaction
+    transaction = await db.cash_transactions.find_one({"id": transaction_id, "user_id": user_id})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction non trouvée")
+    
+    # Get current balance
+    balance_doc = await db.cash_balances.find_one({"user_id": user_id})
+    current_balance = balance_doc['balance'] if balance_doc else 0.0
+    
+    # Reverse the transaction
+    if transaction['type'] == 'deposit':
+        new_balance = current_balance - transaction['amount']
+    else:
+        new_balance = current_balance + transaction['amount']
+    
+    # Delete transaction
+    await db.cash_transactions.delete_one({"id": transaction_id, "user_id": user_id})
+    
+    # Update balance
+    await db.cash_balances.update_one(
+        {"user_id": user_id},
+        {"$set": {"balance": new_balance, "updated_at": datetime.utcnow()}}
+    )
+    
+    return {"message": "Transaction supprimée", "new_balance": new_balance}
+
 # Include the router in the main app
 app.include_router(api_router)
 
